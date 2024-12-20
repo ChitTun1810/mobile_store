@@ -15,11 +15,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # Checkout the code from the repository
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Ensures the entire repository is checked out
 
+    # Ensure PHP and Composer are installed
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.1'  # Specify your PHP version here
+        tools: composer  # Ensure Composer is installed
+
+    # Validate composer.json and composer.lock
     - name: Validate composer.json and composer.lock
-      run: composer validate --strict
+      run: |
+        if [ -f "composer.json" ]; then
+          composer validate --strict
+        else
+          echo "composer.json not found in the repository."
+          exit 1
+        fi
 
+    # Cache Composer packages
     - name: Cache Composer packages
       id: composer-cache
       uses: actions/cache@v3
@@ -29,11 +47,17 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-php-
 
+    # Install dependencies
     - name: Install dependencies
       run: composer install --prefer-dist --no-progress
 
-    # Add a test script to composer.json, for instance: "test": "vendor/bin/phpunit"
-    # Docs: https://getcomposer.org/doc/articles/scripts.md
-
-    # - name: Run test suite
-    #   run: composer run-script test
+    # Run test suite if a test script exists in composer.json
+    - name: Run test suite
+      if: ${{ contains(steps.composer-cache.outputs.cache-hit, 'false') || always() }}
+      run: |
+        if grep -q '"test":' composer.json; then
+          composer run-script test
+        else
+          echo "No test script found in composer.json"
+          exit 1
+        fi
